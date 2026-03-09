@@ -61,7 +61,7 @@ A fully client-side PDF toolkit for compressing, editing, signing, and convertin
 
 Everything runs in the browser. The HTML file loads a few local library files — no build step, no package manager, no external requests.
 
-**Bundled libraries (in `lib/`):**
+**Bundled libraries (inline):**
 
 | Library | Purpose |
 |---------|---------|
@@ -78,11 +78,9 @@ Everything runs in the browser. The HTML file loads a few local library files �
 
 ## Installation
 
-There's nothing to install. No `npm install`, no build tools, no frameworks, no Docker, no server.
+There's nothing to install. No `npm install`, no build tools, no frameworks, no Docker, no server. It's a single HTML file with all dependencies bundled inline. Just open `pdf-tool.html` in your browser.
 
-Just make sure the `lib/` folder with `pdf-lib.min.js`, `pdf.min.js`, `pdf.worker.min.js`, and `UTIF.js` sits next to `pdf-tool.html`, then open the HTML file in your browser.
-
-No internet connection needed — everything is local.
+No internet connection needed — everything is self-contained.
 
 ## Usage
 
