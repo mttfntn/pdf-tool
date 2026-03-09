@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MTTFNTN — PDF Tool</title>
+<script src="lib/pdf-lib.min.js"></script>
+<script src="lib/pdf.min.js"></script>
+<script src="lib/UTIF.js"></script>
+<style>
+:root{--bg:#0e0e10;--surface:#161618;--surface2:#1e1e21;--border:#2a2a2e;--accent:#FF4D00;--accent2:#dd4200;--text:#e0e0e4;--muted:#68686f;--font:'SF Mono','Cascadia Code','Consolas','Liberation Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:44px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;user-select:none}
+.logo{font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--text)}
+.status-pill{font-size:10px;padding:3px 10px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:10px}
+.status-pill.ready{color:#4ade80;border-color:#4ade80}.status-pill.loading{color:#a78bfa;border-color:#a78bfa}.status-pill.error{color:#f87171;border-color:#f87171}
+.main{display:flex;flex:1;overflow:hidden}
+
+/* FILE LIST VIEW */
+.file-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.file-toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.btn{display:flex;align-items:center;gap:5px;padding:5px 12px;font-size:11px;font-family:var(--font);font-weight:500;cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#0e0e10;border-color:var(--accent);font-weight:600}.btn-primary:hover{background:var(--accent2)}
+.btn-ghost{background:transparent;color:var(--muted);border-color:var(--border)}.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn:disabled{opacity:.4;pointer-events:none}
+.sep{width:1px;height:20px;background:var(--border)}
+.file-col-headers{display:grid;grid-template-columns:1fr 90px 90px 80px;padding:6px 12px;font-size:10px;color:var(--muted);letter-spacing:.05em;background:var(--surface);border-bottom:1px solid var(--border);text-transform:uppercase}
+.file-list{flex:1;overflow-y:auto;background:var(--bg)}
+.file-list::-webkit-scrollbar{width:4px}.file-list::-webkit-scrollbar-thumb{background:var(--border)}
+.file-row{display:grid;grid-template-columns:1fr 90px 90px 80px;align-items:center;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.03);font-size:12px;cursor:pointer;position:relative}
+.file-row:hover{background:var(--surface2)}.file-row.selected{background:rgba(255,77,0,.06)}
+.file-row.selected::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent)}
+.file-name{display:flex;align-items:center;gap:6px;overflow:hidden}
+.file-ext{font-size:9px;padding:1px 5px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);flex-shrink:0;text-transform:uppercase}
+.fname-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.file-size{color:var(--muted);font-size:11px}
+.file-pages{color:var(--muted);font-size:11px}
+.file-status{display:flex;align-items:center;justify-content:center}
+.dot{width:6px;height:6px;background:var(--muted)}.dot.done{background:var(--accent)}.dot.error{background:#666}
+.drop-zone{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);cursor:pointer;border:1px dashed transparent;margin:12px}
+.drop-zone.drag-over{border-color:var(--accent);background:rgba(255,77,0,.04);color:var(--text)}
+.drop-icon{width:48px;height:48px;opacity:.25}.drop-zone p{font-size:12px}
+
+/* PAGE VIEW (inside a PDF) */
+.page-panel{flex:1;display:none;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.page-toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.page-grid{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px;align-items:center}
+.page-grid::-webkit-scrollbar{width:4px}.page-grid::-webkit-scrollbar-thumb{background:var(--border)}
+.page-card{position:relative;background:var(--surface);border:2px solid var(--border);cursor:pointer;user-select:none;width:100%;max-width:100%}
+.page-card:hover{border-color:var(--muted)}.page-card.selected{border-color:var(--accent)}
+.page-card canvas{width:100%;display:block}
+.page-num{position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:10px;padding:3px;background:rgba(14,14,16,.85);color:var(--muted)}
+.page-card.selected .page-num{color:var(--accent)}
+.page-card.drag-over-card{border-color:var(--accent);border-style:dashed}
+
+/* SETTINGS PANEL */
+.settings-panel{width:280px;flex-shrink:0;background:var(--surface);display:flex;flex-direction:column;overflow:hidden}
+.panel-tabs{display:flex;border-bottom:1px solid var(--border)}
+.panel-tab{flex:1;padding:10px 0;text-align:center;font-size:10px;font-weight:500;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;letter-spacing:.06em;text-transform:uppercase}
+.panel-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.panel-content{flex:1;overflow-y:auto;padding:14px;display:none}
+.panel-content.active{display:block}
+.panel-content::-webkit-scrollbar{width:4px}.panel-content::-webkit-scrollbar-thumb{background:var(--border)}
+.section-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;margin-top:14px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.section-label:first-child{margin-top:0}
+.field{margin-bottom:12px}
+.field label{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px}
+.field label span{color:var(--text);font-size:11px}
+select,input[type=number],input[type=text]{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;font-size:11px;font-family:var(--font);outline:none}
+select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2368686f'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+select option{background:#1e1e21;color:var(--text)}
+select option:checked{background:#FF4D00;color:#0e0e10}
+select:focus,input:focus{border-color:var(--accent)}
+input[type=range]{width:100%;appearance:none;-webkit-appearance:none;height:3px;background:var(--border);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:13px;height:13px;background:var(--accent);cursor:pointer;border:2px solid var(--bg);box-shadow:0 0 0 1px var(--accent)}
+.checkbox-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:11px;color:var(--text);cursor:pointer}
+.checkbox-row input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;cursor:pointer}
+
+/* SIG */
+.sig-preview{margin-top:8px;background:var(--surface2);border:1px solid var(--border);padding:8px;text-align:center;min-height:60px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:10px}
+.sig-preview img{max-width:100%;max-height:80px}
+.sig-overlay{position:absolute;cursor:grab;z-index:10;pointer-events:auto;border:2px dashed var(--accent);padding:2px;background:rgba(255,77,0,.08);transition:none}
+.sig-overlay:hover{background:rgba(255,77,0,.15)}
+.sig-overlay.dragging{cursor:grabbing;border-style:solid}
+.sig-overlay img{width:100%;height:100%;object-fit:contain;pointer-events:none;display:block}
+.sig-resize{position:absolute;right:-5px;bottom:-5px;width:10px;height:10px;background:var(--accent);cursor:nwse-resize;z-index:11}
+.sig-page-list{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:10px}
+.sig-page-list::-webkit-scrollbar{width:4px}.sig-page-list::-webkit-scrollbar-thumb{background:var(--border)}
+.sig-page-item{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);cursor:pointer;font-size:10px;color:var(--muted)}
+.sig-page-item:hover{border-color:var(--muted);color:var(--text)}
+.sig-page-item.active{border-color:var(--accent);color:var(--accent)}
+.sig-page-item canvas{width:40px;height:auto;display:block;flex-shrink:0}
+
+/* BOTTOM BAR */
+.bottom-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0;gap:10px}
+.stats-row{display:flex;align-items:center;gap:16px;font-size:10px;color:var(--muted)}
+.stat-val{color:var(--text)}
+.btn-action{background:var(--accent);color:#0e0e10;border:none;padding:8px 20px;font-size:12px;font-weight:600;font-family:var(--font);cursor:pointer;display:flex;align-items:center;gap:6px}
+.btn-action:hover{background:var(--accent2)}.btn-action:disabled{opacity:.4;pointer-events:none}
+#toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);padding:8px 16px;font-size:11px;color:var(--text);opacity:0;pointer-events:none;z-index:999}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.success{border-color:var(--accent);color:var(--accent)}#toast.error{border-color:#f87171;color:#f87171}
+#file-input,#img-input,#sig-input{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">MTTFNTN — PDF TOOL</div>
+  <div class="status-pill" id="status">idle</div>
+</header>
+
+<div class="main">
+  <!-- FILE LIST VIEW -->
+  <div class="file-panel" id="file-panel">
+    <div class="file-toolbar">
+      <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+        <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Add PDFs
+      </button>
+      <button class="btn btn-ghost" onclick="document.getElementById('img-input').click()">Add Images</button>
+      <div class="sep"></div>
+      <button class="btn btn-ghost" id="btn-clear-sel" style="display:none" onclick="removeSelectedFiles()">Remove Selected</button>
+      <button class="btn btn-ghost" onclick="clearAllFiles()">Clear All</button>
+      <div style="flex:1"></div>
+      <span id="file-count" style="font-size:11px;color:var(--muted)">0 files</span>
+    </div>
+    <div class="file-col-headers" id="file-col-headers" style="display:none">
+      <div>Name</div><div>Size</div><div>Pages</div><div>Status</div>
+    </div>
+    <div class="file-list" id="file-list">
+      <div class="drop-zone" id="drop-zone">
+        <svg class="drop-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="6" y="6" width="36" height="36" rx="0"/><path d="M16 24h16M24 16v16"/>
+        </svg>
+        <p>Drop PDFs or images here, or click to browse</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE VIEW (hidden by default) -->
+  <div class="page-panel" id="page-panel">
+    <div class="page-toolbar">
+      <button class="btn btn-ghost" onclick="backToList()">
+        <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M7 1L2 5.5 7 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Back
+      </button>
+      <div class="sep"></div>
+      <span id="open-file-name" style="font-size:11px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <div class="sep"></div>
+      <button class="btn btn-ghost" id="btn-del-pages" style="display:none" onclick="deleteSelectedPages()">Remove Selected</button>
+      <button class="btn btn-ghost" id="btn-sel-all" style="display:none" onclick="selectAllPages()">Select All</button>
+      <div style="flex:1"></div>
+      <span id="page-count" style="font-size:11px;color:var(--muted)">0 pages</span>
+    </div>
+    <div id="page-grid" class="page-grid"></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="settings-panel">
+    <div class="panel-tabs">
+      <div class="panel-tab active" onclick="switchTab('compress')">Compress</div>
+      <div class="panel-tab" onclick="switchTab('signature')">Signature</div>
+      <div class="panel-tab" onclick="switchTab('export')">Export</div>
+    </div>
+
+    <div class="panel-content active" id="tab-compress">
+      <div class="section-label">Compression Settings</div>
+      <div class="field">
+        <label>Image Quality <span id="qual-val">80%</span></label>
+        <input type="range" id="img-quality" min="10" max="100" step="5" value="80"
+          oninput="document.getElementById('qual-val').textContent=this.value+'%'">
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" id="strip-metadata" checked> Strip metadata
+      </label>
+    </div>
+
+    <div class="panel-content" id="tab-signature">
+      <div class="section-label">Signature Image</div>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="document.getElementById('sig-input').click()">Load Signature PNG</button>
+      <div class="sig-preview" id="sig-preview">No signature loaded</div>
+      <div id="sig-options" style="display:none">
+        <div class="section-label">Target Page</div>
+        <div class="sig-page-list" id="sig-page-list"></div>
+        <input type="hidden" id="sig-page" value="1">
+        <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-bottom:10px" onclick="placeSigOnPage()">Place on Page</button>
+        <div class="section-label">Fine Tune</div>
+        <div class="field">
+          <label>X Position <span id="sig-x-val">50%</span></label>
+          <input type="range" id="sig-x" min="0" max="100" step="1" value="50"
+            oninput="document.getElementById('sig-x-val').textContent=this.value+'%';updateSigOverlay()">
+        </div>
+        <div class="field">
+          <label>Y Position <span id="sig-y-val">90%</span></label>
+          <input type="range" id="sig-y" min="0" max="100" step="1" value="90"
+            oninput="document.getElementById('sig-y-val').textContent=this.value+'%';updateSigOverlay()">
+        </div>
+        <div class="field">
+          <label>Size <span id="sig-size-val">20%</span></label>
+          <input type="range" id="sig-size" min="5" max="60" step="1" value="20"
+            oninput="document.getElementById('sig-size-val').textContent=this.value+'%';updateSigOverlay()">
+        </div>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px" onclick="applySignature()">Apply Signature</button>
+      </div>
+    </div>
+
+    <div class="panel-content" id="tab-export">
+      <div class="section-label">Image to PDF</div>
+      <div class="field">
+        <label>Page Size</label>
+        <select id="page-size">
+          <option value="a4">A4 (210 x 297 mm)</option>
+          <option value="letter">Letter (8.5 x 11 in)</option>
+          <option value="legal">Legal (8.5 x 14 in)</option>
+          <option value="fit">Fit to image</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Margin (px)</label>
+        <input type="number" id="page-margin" value="20" min="0" max="200">
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" id="img-per-page" checked> One image per page
+      </label>
+      <div class="section-label">Output</div>
+      <label class="checkbox-row">
+        <input type="checkbox" id="same-as-input" checked onchange="toggleSameAsInput()"> Same as input
+      </label>
+      <div class="field" id="filename-field" style="display:none">
+        <label>Filename</label>
+        <input type="text" id="out-filename" value="output.pdf">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <div class="stats-row">
+    <span>Files: <span class="stat-val" id="stat-files">0</span></span>
+    <span>Total pages: <span class="stat-val" id="stat-pages">0</span></span>
+    <span>Size: <span class="stat-val" id="stat-size">--</span></span>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button class="btn-action" id="btn-compress-all" disabled onclick="compressAll()">Compress & Download All</button>
+    <button class="btn-action" id="btn-download" disabled onclick="downloadCurrent()" style="display:none">Download PDF</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="file-input" multiple accept=".pdf" onchange="addPDFFiles(this.files);this.value=''">
+<input type="file" id="img-input" multiple accept="image/*,.tif,.tiff" onchange="addImageFiles(this.files);this.value=''">
+<input type="file" id="sig-input" accept="image/png,image/webp,image/jpeg" onchange="loadSignature(this.files[0]);this.value=''">
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='lib/pdf.worker.min.js';
+const{PDFDocument}=PDFLib;
+
+// ═══════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════
+let pdfFiles=[]; // {id, name, size, bytes, doc, pageCount, status}
+let nextId=0;
+let selectedFileIds=new Set();
+let lastClickedFileId=null;
+
+// Active (opened) file
+let activeFileId=null;
+let selectedPages=new Set();
+let lastClickedPage=null;
+
+// Signature
+let signatureBytes=null,signatureType=null,signatureUrl=null;
+
+// ═══════════════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════════════
+function setStatus(cls,text){const el=document.getElementById('status');el.className='status-pill '+(cls||'');el.textContent=text;}
+function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='show '+(type||'');setTimeout(()=>t.className='',2500);}
+function fmtSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(2)+' MB';}
+
+// TIFF to PNG via UTIF.js
+async function tiffToPng(bytes){
+  const ifds=UTIF.decode(bytes.buffer||bytes);
+  UTIF.decodeImage(bytes.buffer||bytes,ifds[0]);
+  const rgba=UTIF.toRGBA8(ifds[0]);
+  const w=ifds[0].width,h=ifds[0].height;
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const ctx=c.getContext('2d');
+  const id=ctx.createImageData(w,h);
+  id.data.set(new Uint8Array(rgba));
+  ctx.putImageData(id,0,0);
+  const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+function switchTab(name){
+  const tabs=['compress','signature','export'];
+  document.querySelectorAll('.panel-tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===name));
+  document.querySelectorAll('.panel-content').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+function toggleSameAsInput(){
+  const checked=document.getElementById('same-as-input').checked;
+  document.getElementById('filename-field').style.display=checked?'none':'';
+}
+
+function getActiveFile(){return pdfFiles.find(f=>f.id===activeFileId)||null;}
+
+// ═══════════════════════════════════════════════════════════════
+//  DROP ZONE
+// ═══════════════════════════════════════════════════════════════
+const dz=document.getElementById('drop-zone');
+dz.onclick=()=>document.getElementById('file-input').click();
+const fl=document.getElementById('file-list');
+['dragenter','dragover'].forEach(e=>fl.addEventListener(e,ev=>{ev.preventDefault();dz?.classList.add('drag-over');}));
+['dragleave','drop'].forEach(e=>fl.addEventListener(e,ev=>{ev.preventDefault();dz?.classList.remove('drag-over');}));
+fl.addEventListener('drop',ev=>{
+  ev.preventDefault();
+  const f=ev.dataTransfer.files;
+  if(!f.length)return;
+  const pdfs=[],imgs=[];
+  for(const file of f){
+    if(file.name.toLowerCase().endsWith('.pdf'))pdfs.push(file);
+    else if(file.type.startsWith('image/')||/\.(tiff?|jpe?g|png|webp|gif|bmp)$/i.test(file.name))imgs.push(file);
+  }
+  if(pdfs.length)addPDFFiles(pdfs);
+  if(imgs.length)addImageFiles(imgs);
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  ADD PDF FILES
+// ═══════════════════════════════════════════════════════════════
+async function addPDFFiles(fileList){
+  const arr=Array.from(fileList);
+  for(const file of arr){
+    setStatus('loading','loading '+file.name+'…');
+    try{
+      const bytes=new Uint8Array(await file.arrayBuffer());
+      const doc=await PDFDocument.load(bytes,{ignoreEncryption:true});
+      const item={id:nextId++,name:file.name,size:bytes.length,bytes,doc,pageCount:doc.getPageCount(),status:'ready'};
+      pdfFiles.push(item);
+    }catch(e){
+      showToast('Failed to load '+file.name+': '+e.message,'error');
+    }
+  }
+  renderFileList();
+  updateStats();
+  setStatus('ready','ready');
+  if(arr.length===1&&pdfFiles.length===1){
+    showToast('Loaded '+arr[0].name,'success');
+  }else{
+    showToast('Added '+arr.length+' PDF'+(arr.length>1?'s':''),'success');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ADD IMAGE FILES (create a new PDF from images)
+// ═══════════════════════════════════════════════════════════════
+async function addImageFiles(fileList){
+  const arr=Array.from(fileList);
+  if(!arr.length)return;
+  setStatus('loading','adding images…');
+  try{
+    const doc=await PDFDocument.create();
+    const sizes={a4:[595.28,841.89],letter:[612,792],legal:[612,1008]};
+    const pageSize=document.getElementById('page-size').value;
+    const margin=parseInt(document.getElementById('page-margin').value)||0;
+
+    for(const f of arr){
+      const bytes=new Uint8Array(await f.arrayBuffer());
+      let img;
+      const ln=f.name.toLowerCase();
+      if(ln.endsWith('.jpg')||ln.endsWith('.jpeg')){
+        img=await doc.embedJpg(bytes);
+      }else if(ln.endsWith('.png')){
+        img=await doc.embedPng(bytes);
+      }else if(ln.endsWith('.tif')||ln.endsWith('.tiff')){
+        img=await doc.embedPng(await tiffToPng(bytes));
+      }else{
+        const blob=new Blob([bytes],{type:f.type});
+        const url=URL.createObjectURL(blob);
+        const el=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url;});
+        URL.revokeObjectURL(url);
+        const c=document.createElement('canvas');c.width=el.naturalWidth;c.height=el.naturalHeight;
+        c.getContext('2d').drawImage(el,0,0);
+        const pngBlob=await new Promise(r=>c.toBlob(r,'image/png'));
+        img=await doc.embedPng(new Uint8Array(await pngBlob.arrayBuffer()));
+      }
+      let pw,ph;
+      if(pageSize==='fit'){pw=img.width+margin*2;ph=img.height+margin*2;}
+      else{[pw,ph]=sizes[pageSize];}
+      const page=doc.addPage([pw,ph]);
+      const iw=pw-margin*2,ih=ph-margin*2;
+      const scale=Math.min(iw/img.width,ih/img.height);
+      const dw=img.width*scale,dh=img.height*scale;
+      page.drawImage(img,{x:(pw-dw)/2,y:(ph-dh)/2,width:dw,height:dh});
+    }
+
+    const pdfBytes=await doc.save();
+    const reloaded=await PDFDocument.load(pdfBytes);
+    const name='images_'+arr.length+'.pdf';
+    pdfFiles.push({id:nextId++,name,size:pdfBytes.length,bytes:pdfBytes,doc:reloaded,pageCount:reloaded.getPageCount(),status:'ready'});
+    renderFileList();
+    updateStats();
+    setStatus('ready','ready');
+    showToast('Created '+name+' from '+arr.length+' image'+(arr.length>1?'s':''),'success');
+  }catch(e){
+    setStatus('error','error');
+    showToast('Failed to add images: '+e.message,'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FILE LIST RENDERING
+// ═══════════════════════════════════════════════════════════════
+function renderFileList(){
+  const list=document.getElementById('file-list');
+  const headers=document.getElementById('file-col-headers');
+
+  if(pdfFiles.length===0){
+    headers.style.display='none';
+    list.innerHTML='';
+    const dz=document.createElement('div');
+    dz.className='drop-zone';dz.id='drop-zone';
+    dz.onclick=()=>document.getElementById('file-input').click();
+    dz.innerHTML='<svg class="drop-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="6" width="36" height="36" rx="0"/><path d="M16 24h16M24 16v16"/></svg><p>Drop PDFs or images here, or click to browse</p>';
+    list.appendChild(dz);
+    // Re-attach drag events
+    ['dragenter','dragover'].forEach(e=>list.addEventListener(e,ev=>{ev.preventDefault();document.getElementById('drop-zone')?.classList.add('drag-over');}));
+    return;
+  }
+
+  headers.style.display='grid';
+  list.innerHTML='';
+
+  for(const f of pdfFiles){
+    const row=document.createElement('div');
+    row.className='file-row'+(selectedFileIds.has(f.id)?' selected':'');
+    row.dataset.id=f.id;
+
+    const ext=f.name.split('.').pop().toUpperCase();
+    row.innerHTML=
+      '<div class="file-name"><span class="file-ext">'+ext+'</span><span class="fname-text">'+f.name+'</span></div>'+
+      '<div class="file-size">'+fmtSize(f.size)+'</div>'+
+      '<div class="file-pages">'+f.pageCount+' pg</div>'+
+      '<div class="file-status"><div class="dot'+(f.status==='ready'?' done':'')+'"></div></div>';
+
+    row.onclick=e=>selectFile(f.id,e);
+    row.ondblclick=()=>openFile(f.id);
+    list.appendChild(row);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FILE SELECTION
+// ═══════════════════════════════════════════════════════════════
+function selectFile(id,e){
+  const ctrl=e&&(e.ctrlKey||e.metaKey);
+  const shift=e&&e.shiftKey;
+  if(shift&&lastClickedFileId!==null){
+    const ids=pdfFiles.map(f=>f.id);
+    const a=ids.indexOf(lastClickedFileId),b=ids.indexOf(id);
+    const lo=Math.min(a,b),hi=Math.max(a,b);
+    for(let i=lo;i<=hi;i++)selectedFileIds.add(ids[i]);
+  }else if(ctrl){
+    if(selectedFileIds.has(id))selectedFileIds.delete(id);else selectedFileIds.add(id);
+    lastClickedFileId=id;
+  }else{
+    selectedFileIds.clear();selectedFileIds.add(id);lastClickedFileId=id;
+  }
+  updateFileSelUI();
+}
+
+function updateFileSelUI(){
+  document.querySelectorAll('.file-row').forEach(r=>{
+    r.classList.toggle('selected',selectedFileIds.has(parseInt(r.dataset.id)));
+  });
+  document.getElementById('btn-clear-sel').style.display=selectedFileIds.size>0?'':'none';
+}
+
+function removeSelectedFiles(){
+  pdfFiles=pdfFiles.filter(f=>!selectedFileIds.has(f.id));
+  selectedFileIds.clear();lastClickedFileId=null;
+  renderFileList();updateStats();
+}
+
+function clearAllFiles(){
+  pdfFiles=[];selectedFileIds.clear();lastClickedFileId=null;
+  if(activeFileId!==null)backToList();
+  renderFileList();updateStats();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  OPEN FILE (double-click) — switch to page view
+// ═══════════════════════════════════════════════════════════════
+async function openFile(id){
+  const f=pdfFiles.find(x=>x.id===id);
+  if(!f)return;
+  activeFileId=id;
+  selectedPages.clear();lastClickedPage=null;
+
+  // Switch views
+  document.getElementById('file-panel').style.display='none';
+  document.getElementById('page-panel').style.display='flex';
+  document.getElementById('open-file-name').textContent=f.name;
+  document.getElementById('btn-download').style.display='';
+  document.getElementById('btn-compress-all').style.display='none';
+
+  // Set output filename
+  if(document.getElementById('same-as-input').checked){
+    document.getElementById('out-filename').value=f.name;
+  }
+
+  await renderPages(f);
+}
+
+function backToList(){
+  activeFileId=null;
+  selectedPages.clear();lastClickedPage=null;
+  removeSigOverlay();
+
+  document.getElementById('file-panel').style.display='flex';
+  document.getElementById('page-panel').style.display='none';
+  document.getElementById('page-grid').innerHTML='';
+  document.getElementById('btn-download').style.display='none';
+  document.getElementById('btn-compress-all').style.display='';
+  document.getElementById('btn-del-pages').style.display='none';
+  document.getElementById('btn-sel-all').style.display='none';
+
+  // Refresh list in case pages were removed
+  renderFileList();
+  updateStats();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER PAGES (inside an opened PDF)
+// ═══════════════════════════════════════════════════════════════
+async function renderPages(f){
+  const grid=document.getElementById('page-grid');
+  grid.innerHTML='';
+  selectedPages.clear();lastClickedPage=null;updatePageSelUI();
+
+  const count=f.doc.getPageCount();
+  const pdfRender=await pdfjsLib.getDocument({data:f.bytes.slice()}).promise;
+
+  for(let i=0;i<count;i++){
+    const page=await pdfRender.getPage(i+1);
+    const vp=page.getViewport({scale:1});
+    const gridW=grid.clientWidth-32;
+    const scale=Math.max(gridW,400)/vp.width;
+    const svp=page.getViewport({scale});
+    const canvas=document.createElement('canvas');
+    canvas.width=svp.width;canvas.height=svp.height;
+    await page.render({canvasContext:canvas.getContext('2d'),viewport:svp}).promise;
+
+    const card=document.createElement('div');
+    card.className='page-card';card.dataset.index=i;
+    card.appendChild(canvas);
+    const num=document.createElement('div');num.className='page-num';num.textContent='Page '+(i+1);
+    card.appendChild(num);
+    card.onclick=e=>selectPage(i,e);
+
+    // Drag reorder
+    card.draggable=true;
+    card.addEventListener('dragstart',e=>{
+      if(e.dataTransfer.types.includes('Files'))return;
+      e.dataTransfer.setData('application/page-index',''+i);
+      card.style.opacity='.4';
+    });
+    card.addEventListener('dragend',()=>{card.style.opacity='';});
+    card.addEventListener('dragover',e=>{
+      if(e.dataTransfer.types.includes('application/page-index')){e.preventDefault();card.classList.add('drag-over-card');}
+    });
+    card.addEventListener('dragleave',()=>card.classList.remove('drag-over-card'));
+    card.addEventListener('drop',e=>{
+      card.classList.remove('drag-over-card');
+      const fromStr=e.dataTransfer.getData('application/page-index');
+      if(!fromStr)return;
+      e.preventDefault();e.stopPropagation();
+      const from=parseInt(fromStr),to=parseInt(card.dataset.index);
+      if(!isNaN(from)&&!isNaN(to)&&from!==to)reorderPage(from,to);
+    });
+
+    grid.appendChild(card);
+  }
+  pdfRender.destroy();
+  updatePageCount();
+  buildSigPageList();
+  document.getElementById('btn-sel-all').style.display='';
+  document.getElementById('btn-download').disabled=false;
+  if(signatureUrl)updateSigOverlay();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PAGE SELECTION
+// ═══════════════════════════════════════════════════════════════
+function selectPage(idx,e){
+  const ctrl=e&&(e.ctrlKey||e.metaKey);
+  const shift=e&&e.shiftKey;
+  if(shift&&lastClickedPage!==null){
+    const lo=Math.min(lastClickedPage,idx),hi=Math.max(lastClickedPage,idx);
+    for(let i=lo;i<=hi;i++)selectedPages.add(i);
+  }else if(ctrl){
+    if(selectedPages.has(idx))selectedPages.delete(idx);else selectedPages.add(idx);
+    lastClickedPage=idx;
+  }else{
+    selectedPages.clear();selectedPages.add(idx);lastClickedPage=idx;
+  }
+  updatePageSelUI();
+}
+
+function selectAllPages(){
+  const f=getActiveFile();if(!f)return;
+  const c=f.doc.getPageCount();
+  if(selectedPages.size===c)selectedPages.clear();
+  else{for(let i=0;i<c;i++)selectedPages.add(i);}
+  updatePageSelUI();
+}
+
+function updatePageSelUI(){
+  document.querySelectorAll('.page-card').forEach(c=>c.classList.toggle('selected',selectedPages.has(parseInt(c.dataset.index))));
+  const btn=document.getElementById('btn-del-pages');
+  btn.style.display=selectedPages.size>0?'':'none';
+  btn.textContent='Remove Selected ('+selectedPages.size+')';
+}
+
+function updatePageCount(){
+  const f=getActiveFile();
+  const c=f?f.doc.getPageCount():0;
+  document.getElementById('page-count').textContent=c+' page'+(c!==1?'s':'');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DELETE PAGES
+// ═══════════════════════════════════════════════════════════════
+async function deleteSelectedPages(){
+  const f=getActiveFile();
+  if(!f||!selectedPages.size)return;
+  setStatus('loading','removing…');
+  try{
+    const count=f.doc.getPageCount();
+    const keep=[];
+    for(let i=0;i<count;i++){if(!selectedPages.has(i))keep.push(i);}
+    const removed=selectedPages.size;
+    selectedPages.clear();lastClickedPage=null;
+    removeSigOverlay();
+
+    if(keep.length===0){
+      // Remove file entirely
+      pdfFiles=pdfFiles.filter(x=>x.id!==f.id);
+      backToList();
+      setStatus('','idle');
+      showToast('All pages removed, file deleted','success');
+      return;
+    }
+
+    const newDoc=await PDFDocument.create();
+    const copied=await newDoc.copyPages(f.doc,keep);
+    copied.forEach(p=>newDoc.addPage(p));
+    f.bytes=await newDoc.save();
+    f.doc=await PDFDocument.load(f.bytes);
+    f.pageCount=f.doc.getPageCount();
+    f.size=f.bytes.length;
+    await renderPages(f);
+    setStatus('ready','ready');
+    showToast('Removed '+removed+' page'+(removed>1?'s':''),'success');
+  }catch(e){
+    setStatus('error','error');
+    showToast('Remove error: '+e.message,'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  REORDER PAGES
+// ═══════════════════════════════════════════════════════════════
+async function reorderPage(from,to){
+  const f=getActiveFile();if(!f)return;
+  const count=f.doc.getPageCount();
+  const order=[];for(let i=0;i<count;i++)order.push(i);
+  order.splice(from,1);order.splice(to,0,from);
+  const newDoc=await PDFDocument.create();
+  const copied=await newDoc.copyPages(f.doc,order);
+  copied.forEach(p=>newDoc.addPage(p));
+  f.bytes=await newDoc.save();
+  f.doc=await PDFDocument.load(f.bytes);
+  f.size=f.bytes.length;
+  selectedPages.clear();lastClickedPage=null;
+  await renderPages(f);
+  showToast('Moved page '+(from+1)+' to position '+(to+1),'success');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SIGNATURE
+// ═══════════════════════════════════════════════════════════════
+function loadSignature(file){
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    signatureBytes=new Uint8Array(reader.result);
+    signatureType=file.name.toLowerCase().endsWith('.png')?'png':'jpg';
+    if(signatureUrl)URL.revokeObjectURL(signatureUrl);
+    signatureUrl=URL.createObjectURL(file);
+    document.getElementById('sig-preview').innerHTML='<img src="'+signatureUrl+'">';
+    document.getElementById('sig-options').style.display='';
+    updateSigOverlay();
+    showToast('Signature loaded — drag it on the page to position','success');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function buildSigPageList(){
+  const list=document.getElementById('sig-page-list');
+  list.innerHTML='';
+  const f=getActiveFile();if(!f)return;
+  const curPage=parseInt(document.getElementById('sig-page').value)||1;
+  if(curPage>f.pageCount)document.getElementById('sig-page').value=1;
+
+  document.querySelectorAll('.page-card').forEach((card,i)=>{
+    const item=document.createElement('div');
+    item.className='sig-page-item'+(parseInt(document.getElementById('sig-page').value)===(i+1)?' active':'');
+    const srcCanvas=card.querySelector('canvas');
+    const thumb=document.createElement('canvas');
+    const tw=40,th=Math.round(tw*(srcCanvas.height/srcCanvas.width));
+    thumb.width=tw;thumb.height=th;
+    thumb.getContext('2d').drawImage(srcCanvas,0,0,tw,th);
+    item.appendChild(thumb);
+    const label=document.createElement('span');
+    label.textContent='Page '+(i+1);
+    item.appendChild(label);
+    item.onclick=()=>{
+      document.getElementById('sig-page').value=i+1;
+      list.querySelectorAll('.sig-page-item').forEach(el=>el.classList.remove('active'));
+      item.classList.add('active');
+      updateSigOverlay();
+    };
+    list.appendChild(item);
+  });
+}
+
+function placeSigOnPage(){
+  if(!signatureUrl){showToast('Load a signature image first','error');return;}
+  if(!getActiveFile()){showToast('Open a PDF first','error');return;}
+  updateSigOverlay();
+  const pageIdx=parseInt(document.getElementById('sig-page').value)-1;
+  const card=document.querySelector('.page-card[data-index="'+pageIdx+'"]');
+  if(card)card.scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+function removeSigOverlay(){
+  const old=document.querySelector('.sig-overlay');
+  if(old)old.remove();
+}
+
+function updateSigOverlay(){
+  removeSigOverlay();
+  if(!signatureUrl||!getActiveFile())return;
+  const pageIdx=parseInt(document.getElementById('sig-page').value)-1;
+  const card=document.querySelector('.page-card[data-index="'+pageIdx+'"]');
+  if(!card)return;
+
+  const xPct=parseInt(document.getElementById('sig-x').value)/100;
+  const yPct=parseInt(document.getElementById('sig-y').value)/100;
+  const sizePct=parseInt(document.getElementById('sig-size').value)/100;
+
+  const canvas=card.querySelector('canvas');
+  const cw=canvas.clientWidth,ch=canvas.clientHeight;
+  const sigW=cw*sizePct;
+
+  const overlay=document.createElement('div');
+  overlay.className='sig-overlay';
+  overlay.style.width=sigW+'px';
+  overlay.style.left=(xPct*(cw-sigW))+'px';
+  overlay.style.top=(yPct*(ch-sigW*0.4)-sigW*0.2)+'px';
+
+  const img=document.createElement('img');
+  img.src=signatureUrl;
+  img.onload=()=>{
+    const ratio=img.naturalHeight/img.naturalWidth;
+    const sigH=sigW*ratio;
+    overlay.style.height=sigH+'px';
+    overlay.style.top=(yPct*ch-sigH/2)+'px';
+    const t=parseFloat(overlay.style.top);
+    if(t<0)overlay.style.top='0px';
+    if(t+sigH>ch)overlay.style.top=(ch-sigH)+'px';
+  };
+  overlay.appendChild(img);
+
+  const handle=document.createElement('div');
+  handle.className='sig-resize';
+  overlay.appendChild(handle);
+
+  let dragging=false,resizing=false,startX,startY,startLeft,startTop,startW;
+
+  overlay.addEventListener('mousedown',e=>{
+    if(e.target===handle)return;
+    e.preventDefault();e.stopPropagation();
+    dragging=true;overlay.classList.add('dragging');
+    startX=e.clientX;startY=e.clientY;
+    startLeft=parseFloat(overlay.style.left);startTop=parseFloat(overlay.style.top);
+  });
+
+  handle.addEventListener('mousedown',e=>{
+    e.preventDefault();e.stopPropagation();
+    resizing=true;overlay.classList.add('dragging');
+    startX=e.clientX;startW=parseFloat(overlay.style.width);
+  });
+
+  document.addEventListener('mousemove',e=>{
+    if(dragging){
+      const dx=e.clientX-startX,dy=e.clientY-startY;
+      let nx=startLeft+dx,ny=startTop+dy;
+      const ow=parseFloat(overlay.style.width),oh=parseFloat(overlay.style.height)||ow*0.4;
+      nx=Math.max(0,Math.min(nx,cw-ow));
+      ny=Math.max(0,Math.min(ny,ch-oh));
+      overlay.style.left=nx+'px';overlay.style.top=ny+'px';
+      syncSlidersFromOverlay(card,overlay);
+    }
+    if(resizing){
+      const dx=e.clientX-startX;
+      let nw=Math.max(cw*0.05,Math.min(startW+dx,cw*0.6));
+      overlay.style.width=nw+'px';
+      const ratio=img.naturalHeight/img.naturalWidth||0.4;
+      overlay.style.height=(nw*ratio)+'px';
+      const nl=parseFloat(overlay.style.left);
+      if(nl+nw>cw)overlay.style.left=(cw-nw)+'px';
+      const nt=parseFloat(overlay.style.top),nh=nw*ratio;
+      if(nt+nh>ch)overlay.style.top=(ch-nh)+'px';
+      syncSlidersFromOverlay(card,overlay);
+    }
+  });
+
+  document.addEventListener('mouseup',()=>{
+    if(dragging||resizing){dragging=false;resizing=false;overlay.classList.remove('dragging');}
+  });
+
+  card.appendChild(overlay);
+  card.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function syncSlidersFromOverlay(card,overlay){
+  const canvas=card.querySelector('canvas');
+  const cw=canvas.clientWidth,ch=canvas.clientHeight;
+  const ow=parseFloat(overlay.style.width),oh=parseFloat(overlay.style.height)||ow*0.4;
+  const ol=parseFloat(overlay.style.left),ot=parseFloat(overlay.style.top);
+  const sizePct=Math.round((ow/cw)*100);
+  const xPct=cw-ow>0?Math.round((ol/(cw-ow))*100):50;
+  const yPct=ch>0?Math.round(((ot+oh/2)/ch)*100):50;
+  document.getElementById('sig-size').value=sizePct;
+  document.getElementById('sig-size-val').textContent=sizePct+'%';
+  document.getElementById('sig-x').value=Math.max(0,Math.min(100,xPct));
+  document.getElementById('sig-x-val').textContent=Math.max(0,Math.min(100,xPct))+'%';
+  document.getElementById('sig-y').value=Math.max(0,Math.min(100,yPct));
+  document.getElementById('sig-y-val').textContent=Math.max(0,Math.min(100,yPct))+'%';
+}
+
+async function applySignature(){
+  const f=getActiveFile();
+  if(!f||!signatureBytes)return;
+  removeSigOverlay();
+  setStatus('loading','applying signature…');
+  try{
+    const pageIdx=parseInt(document.getElementById('sig-page').value)-1;
+    const xPct=parseInt(document.getElementById('sig-x').value)/100;
+    const yPct=parseInt(document.getElementById('sig-y').value)/100;
+    const sizePct=parseInt(document.getElementById('sig-size').value)/100;
+
+    let img;
+    if(signatureType==='png')img=await f.doc.embedPng(signatureBytes);
+    else img=await f.doc.embedJpg(signatureBytes);
+
+    const page=f.doc.getPage(pageIdx);
+    const{width:pw,height:ph}=page.getSize();
+    const sigW=pw*sizePct;
+    const sigH=sigW*(img.height/img.width);
+    const x=xPct*(pw-sigW);
+    const y=ph-yPct*ph-sigH/2;
+    page.drawImage(img,{x,y,width:sigW,height:sigH});
+
+    f.bytes=await f.doc.save();
+    f.doc=await PDFDocument.load(f.bytes);
+    f.size=f.bytes.length;
+    await renderPages(f);
+    setStatus('ready','ready');
+    showToast('Signature applied to page '+(pageIdx+1),'success');
+  }catch(e){
+    setStatus('error','error');
+    showToast('Signature error: '+e.message,'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  COMPRESS A SINGLE PDF — render pages to JPEG, rebuild
+// ═══════════════════════════════════════════════════════════════
+async function compressPDF(f){
+  const quality=parseInt(document.getElementById('img-quality').value)/100;
+  const stripMeta=document.getElementById('strip-metadata').checked;
+  const origSize=f.bytes.length;
+
+  // Render every page via pdf.js → canvas → JPEG blob
+  const pdfRender=await pdfjsLib.getDocument({data:f.bytes.slice()}).promise;
+  const count=pdfRender.numPages;
+  const newDoc=await PDFDocument.create();
+
+  for(let i=1;i<=count;i++){
+    const page=await pdfRender.getPage(i);
+    const vp=page.getViewport({scale:2}); // 2x for decent quality
+    const canvas=document.createElement('canvas');
+    canvas.width=vp.width;canvas.height=vp.height;
+    await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+
+    // Convert canvas to JPEG at target quality
+    const jpegBlob=await new Promise(r=>canvas.toBlob(r,'image/jpeg',quality));
+    const jpegBytes=new Uint8Array(await jpegBlob.arrayBuffer());
+    const jpegImg=await newDoc.embedJpg(jpegBytes);
+
+    // Get original page dimensions (in PDF points)
+    const origPage=f.doc.getPage(i-1);
+    const{width:pw,height:ph}=origPage.getSize();
+    const p=newDoc.addPage([pw,ph]);
+    p.drawImage(jpegImg,{x:0,y:0,width:pw,height:ph});
+  }
+  pdfRender.destroy();
+
+  if(stripMeta){
+    newDoc.setTitle('');newDoc.setAuthor('');newDoc.setSubject('');
+    newDoc.setKeywords([]);newDoc.setProducer('');newDoc.setCreator('');
+  }
+
+  const compressed=await newDoc.save({useObjectStreams:true});
+  return{compressed,origSize,newSize:compressed.length};
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  COMPRESS & DOWNLOAD ALL (batch)
+// ═══════════════════════════════════════════════════════════════
+async function compressAll(){
+  if(!pdfFiles.length)return;
+  setStatus('loading','compressing…');
+  let totalOrig=0,totalNew=0;
+
+  for(let i=0;i<pdfFiles.length;i++){
+    const f=pdfFiles[i];
+    setStatus('loading','compressing '+(i+1)+'/'+pdfFiles.length+'…');
+    try{
+      const{compressed,origSize,newSize}=await compressPDF(f);
+      totalOrig+=origSize;totalNew+=newSize;
+      triggerDownload(new Blob([compressed],{type:'application/pdf'}),f.name);
+      f.status='done';
+    }catch(e){
+      f.status='error';
+      showToast('Error compressing '+f.name+': '+e.message,'error');
+    }
+  }
+
+  renderFileList();
+  const pct=Math.round((totalOrig-totalNew)/totalOrig*100);
+  setStatus('ready','ready');
+  showToast('Compressed '+pdfFiles.length+' file'+(pdfFiles.length>1?'s':'')+': '+fmtSize(totalOrig)+' → '+fmtSize(totalNew)+(pct>0?' (-'+pct+'%)':''),'success');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DOWNLOAD CURRENT (single file, from page view)
+// ═══════════════════════════════════════════════════════════════
+async function downloadCurrent(){
+  const f=getActiveFile();if(!f)return;
+  try{
+    const bytes=await f.doc.save();
+    const name=document.getElementById('same-as-input').checked?f.name:(document.getElementById('out-filename').value||'output.pdf');
+    triggerDownload(new Blob([bytes],{type:'application/pdf'}),name);
+    showToast('Downloaded '+name,'success');
+  }catch(e){showToast('Download error: '+e.message,'error');}
+}
+
+function triggerDownload(blob,name){
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  STATS
+// ═══════════════════════════════════════════════════════════════
+function updateStats(){
+  const n=pdfFiles.length;
+  const totalPages=pdfFiles.reduce((s,f)=>s+f.pageCount,0);
+  const totalSize=pdfFiles.reduce((s,f)=>s+f.size,0);
+  document.getElementById('stat-files').textContent=n;
+  document.getElementById('stat-pages').textContent=totalPages;
+  document.getElementById('stat-size').textContent=n?fmtSize(totalSize):'--';
+  document.getElementById('file-count').textContent=n+' file'+(n!==1?'s':'');
+  document.getElementById('btn-compress-all').disabled=n===0;
+}
+
+updateStats();
+</script>
+</body>
+</html>
